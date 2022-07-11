@@ -17,6 +17,7 @@ class Query:
                   "from temptable group by Date)")
         spark.sql("create temporary view temp2 as (select Date,min(((Low-Open)/Open)*100) as Negative "
                   "from temptable group by Date)"),
+        #spark.sql("select * from temp2").show()
         spark.sql("create temporary view temp3 as (select Date,Stock_Name as Max_Stock_Name,((High-Open)/Open)*100 as Positive "
                   "from temptable where ((High-Open)/Open)*100 in ( select Positive from temp1 "
                   "where temptable.Date = temp1.Date)) ")
@@ -28,16 +29,15 @@ class Query:
         return json.loads(sqldf.toPandas().to_json(orient="table", index=False))
 
     def task_2(self):
-        sqldf=spark.sql("select Date,Stock_Name,Volume from temptable where Date || Volume in "
-                         "(select Date || Max(Volume) from temptable group by Date)")
+        sqldf=spark.sql("select Date,Stock_Name,Volume from temptable as s where Volume = ( select Max(Volume) from "
+                        "temptable where temptable.Date=s.Date)")
         sqldf.show()
         return json.loads(sqldf.toPandas().to_json(orient="table", index=False))
 
     def task_3(self):
 
-        spark.sql("create temporary view temp3_1 as ( select Stock_Name,Open, lag(Close,1,0) over (order by Date) "
-                  "as Adj_Close from temptable)")
-
+        spark.sql("create temporary view temp3_1 as (select Stock_Name,Open,Date,lag(Close,1,0) over "
+                        "( partition by Stock_Name order by Date ASC ) as Adj_Close from temptable)")
         spark.sql("create temporary view temp3_2 as (select Max(Open-Adj_Close) as Max_Gap, "
                   "Min(Open-Adj_Close) as Min_Gap from temp3_1)")
         sqldf= spark.sql("select Stock_Name, (Open-Adj_Close) as Max_Min_Gap from temp3_1 where exists "
@@ -50,13 +50,13 @@ class Query:
     def task_4(self):
         spark.sql("create temporary view temp4_1 as (select Stock_Name, min(Date) as Min_Date from temptable "
                   "group by Stock_Name)")
+
         spark.sql("create temporary view temp4_2 as (select Stock_Name, max(High) as High from temptable "
-                  "where not exists ( select * from temp4_1 where temp4_1.Stock_name = temptable.Stock_name and "
-                  "temp4_1.Min_Date= temptable.Date)"
                   "group by Stock_Name )")
         spark.sql("create temporary view temp4_3 as ( select Stock_Name, Open from temptable "
                   "where exists ( select * from temp4_1 where temp4_1.Stock_Name = temptable.Stock_name and "
                   " temp4_1.Min_Date = temptable.Date ))")
+        spark.sql("select * from temp4_3").show()
         spark.sql("create temporary view temp4_4 as ( select max(temp4_2.High - temp4_3.Open) from  "
                   "temp4_2 inner join temp4_3 "
                   "on temp4_2.Stock_Name = temp4_3.Stock_Name )")
@@ -99,7 +99,5 @@ class Query:
         return json.loads(sqldf.toPandas().to_json(orient="table", index=False))
 
 
-obj = Query()
-obj.task_3()
-
-
+# obj = Query()
+# obj.task_3()
